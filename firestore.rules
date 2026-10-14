@@ -1,0 +1,127 @@
+rules_version = '2';
+// ─────────────────────────────────────────────────────────────────────────────
+//  BALAJI PAUVA HOUSE · Firestore security rules (order system v2)
+//  Paste the whole file in: Firebase console → Firestore Database → Rules → Publish
+//
+//  Collections
+//   orders/{orderId}      one document per order (website writes, dashboard manages)
+//   customers/{phone}     customer record keyed by 10-digit mobile number
+//   users/{uid}           profile of a logged-in customer account
+//   settings/store        live shop settings (accepting orders, UPI id, fees, ETA)
+//   admins/{email}        staff allowed into admin.html (document id = login email)
+//   enquiries/{id}        franchise enquiries from the website form
+// ─────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // staff = signed in with an email that has a document in /admins
+    function hasEmail() { return signedIn() && ('email' in request.auth.token) && request.auth.token.email is string; }
+    function isAdmin() {
+      return hasEmail()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    function isOwner(data) { return signedIn() && data.uid == request.auth.uid; }
+
+    // ── orders ───────────────────────────────────────────────────────────────
+    function validNewOrder(d) {
+      return d.keys().hasAll(['id', 'uid', 'items', 'mode', 'phone', 'total', 'count', 'placedAt', 'status'])
+        && d.uid == request.auth.uid
+        && d.id is string && d.id.size() >= 8 && d.id.size() <= 40
+        && d.items is list && d.items.size() >= 1 && d.items.size() <= 60
+        && d.mode in ['delivery', 'pickup']
+        && d.phone is string && d.phone.size() >= 10 && d.phone.size() <= 15
+        && d.total is number && d.total >= 0 && d.total <= 100000
+        && d.count is number && d.count >= 1 && d.count <= 500
+        && d.placedAt is number
+        && d.status == 'received'
+        // payment block (older cached clients may omit it)
+        && (!('payment' in d) || (d.payment is map
+              && d.payment.method in ['cod', 'upi']
+              && d.payment.status == 'pending'));
+    }
+
+    // customer may only report a UPI payment (UTR) on their own order
+    function customerPaymentClaim() {
+      let b = resource.data;
+      let a = request.resource.data;
+      return a.diff(b).affectedKeys().hasOnly(['payment', 'updatedAt'])
+        && a.payment.method == b.payment.method
+        && a.payment.amount == b.payment.amount
+        && b.payment.status in ['pending', 'claimed', 'failed']
+        && a.payment.status == 'claimed'
+        && a.payment.utr is string && a.payment.utr.size() <= 40;
+    }
+
+    // customer may cancel only while the shop has not accepted it yet
+    function customerCancel() {
+      let b = resource.data;
+      let a = request.resource.data;
+      return a.diff(b).affectedKeys().hasOnly(['status', 'cancelReason', 'cancelledAt', 'cancelledBy', 'updatedAt'])
+        && b.status == 'received'
+        && a.status == 'cancelled'
+        && a.cancelledBy == 'customer';
+    }
+
+    match /orders/{orderId} {
+      allow get, list: if isAdmin() || isOwner(resource.data);
+      allow create: if signedIn()
+                    && orderId == request.resource.data.id
+                    && validNewOrder(request.resource.data);
+      allow update: if isAdmin()
+                    || (isOwner(resource.data) && (customerPaymentClaim() || customerCancel()));
+      allow delete: if isAdmin();
+    }
+
+    // ── customers (record per phone number, written by the website on each order) ──
+    function validCustomer(d) {
+      return d.keys().hasOnly(['phone', 'name', 'email', 'uid', 'lastOrderId', 'lastOrderAt', 'lastMode', 'lastOutlet',
+                               'lastAddress', 'addresses', 'orders', 'spend', 'updatedAt', 'createdAt', 'firstOrderId',
+                               'note', 'tags', 'blocked'])
+        && d.phone is string && d.phone.size() == 10
+        && (!('name' in d) || (d.name is string && d.name.size() <= 80))
+        && (!('lastAddress' in d) || (d.lastAddress is string && d.lastAddress.size() <= 400))
+        && (!('addresses' in d) || (d.addresses is list && d.addresses.size() <= 20));
+    }
+    match /customers/{phone} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+                    || (signedIn() && request.resource.data.phone == phone && validCustomer(request.resource.data));
+      allow update: if isAdmin()
+                    || (signedIn() && request.resource.data.phone == phone && validCustomer(request.resource.data)
+                        // staff-only fields cannot be touched from the website
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['note', 'tags', 'blocked', 'createdAt']));
+      allow delete: if isAdmin();
+    }
+
+    // ── users (customer account profiles) ──
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ── settings (public read: the website needs open/closed, UPI id, fees before login) ──
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── admins ──
+    match /admins/{email} {
+      allow get: if hasEmail() && request.auth.token.email == email;   // "am I staff?"
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ── franchise enquiries ──
+    match /enquiries/{id} {
+      allow read: if isAdmin();
+      allow create: if signedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.id == id;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

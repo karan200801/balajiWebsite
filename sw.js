@@ -1,9 +1,9 @@
 'use strict';
-/* Balaji Pauva House — service worker v2
+/* Balaji Pauva House — service worker v3 (order system v2: real orders + payment)
    Goal: open the app instantly, every time, even on a weak network.
    How: the saved page is shown immediately; a fresh copy downloads
    quietly in the background for the NEXT open. No spinner, no error page. */
-const CACHE='balaji-shell-v2-c9f4e1ab';
+const CACHE='balaji-shell-v3-order-system';
 const CORE=['/index.html','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/maskable-512.png','/icons/apple-touch-icon.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

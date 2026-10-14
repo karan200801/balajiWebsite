@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#650e08">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<title>Balaji Orders — Shop Dashboard</title>
+<!--
+  BALAJI PAUVA HOUSE · SHOP DASHBOARD (staff only)
+  Live order board for the kitchen / counter. Orders placed on the website
+  appear here instantly (Firestore realtime). Staff accept, cook, mark ready,
+  deliver, verify UPI payments, and see customer records.
+  Login: Firebase email + password account that is listed in the
+  Firestore collection "admins" (document id = the email). See SETUP-ORDER-SYSTEM.md
+-->
+<style>
+:root{--maroon:#650e08;--deep:#4c0603;--orange:#f58320;--cream:#fff4e5;--frame:#ffebc9;--brown:#60391e;--muted:#81674f;--line:#e2cdb4;--page:#f6efe4;--card:#fff;--green:#1fa855;--green-d:#15823f;--red:#c0392b;--blue:#2b5ea7;--amber:#b86b00;--shadow:0 8px 24px #653a1314}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial,sans-serif;background:var(--page);color:var(--brown);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+a{color:var(--maroon)}
+[hidden]{display:none!important}
+svg{width:18px;height:18px;flex:0 0 auto}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:30;background:var(--maroon);color:#ffe9cd;display:flex;align-items:center;gap:10px;padding:10px 14px;box-shadow:0 4px 18px #3a120540;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.3px;font-size:17px}
+.brand img{width:34px;height:34px;border-radius:9px;background:#fff}
+.brand small{display:block;font-weight:500;font-size:11px;opacity:.75;letter-spacing:.8px;text-transform:uppercase}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dot{width:9px;height:9px;border-radius:50%;background:#9aa;box-shadow:0 0 0 3px #ffffff22}
+.dot.on{background:#3ddc84;animation:pulse 1.6s infinite}
+.dot.off{background:#ff6b6b}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px #3ddc8433}50%{box-shadow:0 0 0 6px #3ddc8411}}
+.tb-btn{display:inline-flex;align-items:center;gap:6px;background:#ffffff1a;color:#ffe9cd;border:1px solid #ffffff2a;border-radius:11px;padding:7px 11px;font-size:13px;font-weight:600;min-height:36px}
+.tb-btn:hover{background:#ffffff2e}
+.tb-btn.alert{background:#ff9f1c;color:#3a1200;border-color:#ff9f1c}
+.tb-btn select{background:transparent;border:0;color:inherit;font-weight:600;outline:0}
+.tb-btn select option{color:#222}
+.tb-mobile{display:none}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600}
+.switch i{width:38px;height:22px;border-radius:22px;background:#ffffff33;position:relative;transition:.2s}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch input:checked+i{background:#3ddc84}
+.switch input:checked+i::after{left:19px}
+
+/* ---------- nav tabs ---------- */
+.tabs{display:flex;gap:4px;padding:8px 10px 0;background:var(--maroon);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{position:relative;color:#ffd8ac;padding:9px 14px 11px;border-radius:12px 12px 0 0;font-weight:700;font-size:14px;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+.tabs button.on{background:var(--page);color:var(--maroon)}
+.tabs .cnt{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#ff9f1c;color:#3a1200;font-size:12px;display:grid;place-items:center;font-weight:800}
+.tabs button.on .cnt{background:var(--maroon);color:#ffe9cd}
+
+main{padding:14px;max-width:1500px;margin:0 auto}
+
+/* ---------- login ---------- */
+.login-wrap{min-height:calc(100vh - 70px);display:grid;place-items:center;padding:20px}
+.login{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:var(--shadow)}
+.login h1{font-size:22px;color:var(--maroon);margin-bottom:4px}
+.login p{color:var(--muted);font-size:14px;margin-bottom:18px}
+.f{margin-bottom:12px}
+.f label{display:block;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.f input,.f select,.f textarea{width:100%;min-height:46px;border:1.5px solid var(--line);border-radius:13px;padding:10px 13px;background:#fff;outline:0}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--orange);box-shadow:0 0 0 3px #f5832030}
+.f textarea{min-height:80px;resize:vertical}
+.msg{display:none;padding:10px 12px;border-radius:11px;font-size:13.5px;margin:6px 0 12px}
+.msg.show{display:block}
+.msg.err{background:#fdecea;border:1px solid #f2b8b0;color:#8f2214}
+.msg.ok{background:#e8f5ea;border:1px solid #b9dfc1;color:#1f6b31}
+.msg.info{background:#fff3d9;border:1px solid #dcbc8d;color:#6d5138}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 14px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:14px;color:var(--brown);transition:transform .12s,background .15s;white-space:nowrap}
+.btn:hover{background:var(--frame)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.p{background:var(--maroon);border-color:var(--maroon);color:#ffe9cd}
+.btn.p:hover{background:#7d1a0a}
+.btn.g{background:var(--green);border-color:var(--green);color:#fff}
+.btn.g:hover{background:var(--green-d)}
+.btn.o{background:var(--orange);border-color:var(--orange);color:#fff}
+.btn.o:hover{background:#d96f12}
+.btn.b{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.d{color:var(--red);border-color:#f3bcbc}
+.btn.d:hover{background:#fdecea}
+.btn.sm{min-height:32px;padding:4px 10px;font-size:12.5px;border-radius:9px}
+.btn.wide{width:100%}
+.btn .spin{width:16px;height:16px;border-radius:50%;border:2.5px solid #ffffff55;border-top-color:#fff;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:24px;color:var(--maroon);line-height:1.1}
+.stat span{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+.stat.warn b{color:var(--amber)}
+
+/* ---------- board ---------- */
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+@media (max-width:1100px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.board{grid-template-columns:1fr}}
+.col{background:#efe4d3;border-radius:18px;padding:10px;min-height:120px}
+.col h2{display:flex;align-items:center;gap:8px;font-size:14px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:4px 6px 10px}
+.col h2 .cnt{margin-left:auto;background:#fff;border-radius:10px;padding:1px 9px;font-size:13px;color:var(--maroon)}
+.col.new{background:#fde9d5}
+.col.new h2{color:#b45309}
+.col.cook{background:#fff1c7}
+.col.ready{background:#dff3e3}
+.col.done{background:#ebe6df}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:22px 6px}
+
+/* ---------- order card ---------- */
+.oc{background:var(--card);border-radius:16px;padding:12px 13px;margin-bottom:10px;border:1px solid #0000000d;box-shadow:0 4px 14px #4a200a10;position:relative;overflow:hidden}
+.oc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--muted)}
+.oc.s-received::before{background:var(--orange)}
+.oc.s-confirmed::before,.oc.s-preparing::before{background:#e0a800}
+.oc.s-ready::before,.oc.s-out::before{background:var(--green)}
+.oc.s-completed::before{background:#9aa}
+.oc.s-cancelled::before{background:var(--red)}
+.oc.is-new{animation:flash 1.2s ease-in-out 4}
+@keyframes flash{0%,100%{box-shadow:0 4px 14px #4a200a10}50%{box-shadow:0 0 0 4px #f5832088}}
+.oc-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.oc-id{font-size:22px;font-weight:900;color:var(--maroon);letter-spacing:.5px}
+.oc-id small{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0;margin-left:4px}
+.oc-time{margin-left:auto;font-size:12.5px;color:var(--muted);text-align:right}
+.oc-time b{display:block;color:var(--brown)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;letter-spacing:.3px;padding:3px 9px;border-radius:99px;background:#f3eadb;border:1px solid #e6d6bf;color:#7e654f;text-transform:uppercase}
+.chip svg{width:12px;height:12px}
+.chip.delivery{background:#e8f3ea;border-color:#c4dfc9;color:#2e6b3a}
+.chip.pickup{background:#eaf0f8;border-color:#c5d5ea;color:#33567e}
+.chip.paid{background:#e8f3ea;border-color:#c4dfc9;color:#1f6b31}
+.chip.due{background:#fdeeee;border-color:#f3bcbc;color:#9c2a1e}
+.chip.claim{background:#fff3d9;border-color:#dcbc8d;color:#8a5a00}
+.chip.cod{background:#f7f1e6;border-color:#e4d3b8;color:#6d5138}
+.chip.live{background:#fdeecf;border-color:#f3c98a;color:#96590a}
+.chip.live i{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:pulse 1.2s infinite}
+.chip.st{background:var(--maroon);border-color:var(--maroon);color:#ffe9cd}
+.chip.cancel{background:#fdeeee;border-color:#f3bcbc;color:#9c2a1e}
+.cust{font-size:14px;margin:4px 0 8px;line-height:1.5}
+.cust b{font-size:15px}
+.cust a{font-weight:700;text-decoration:none}
+.cust .addr{color:var(--muted);font-size:13px}
+.cust .addr a{font-weight:600;margin-left:4px}
+.items{list-style:none;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);padding:6px 0;margin:6px 0}
+.items li{display:flex;gap:8px;padding:3px 0;font-size:14.5px}
+.items li b{min-width:30px;color:var(--maroon)}
+.items li span{margin-left:auto;color:var(--muted);font-size:13px}
+.note svg{width:14px;height:14px;vertical-align:-2px}
+.col h2 svg{width:16px;height:16px}
+.cust .addr svg{width:13px;height:13px;vertical-align:-2px}
+.eta svg{width:14px;height:14px}
+.note{background:#fff8dc;border:1px dashed #e8c96a;color:#6b4a00;border-radius:10px;padding:7px 10px;font-size:13.5px;margin:6px 0}
+.tot{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;color:var(--muted);margin:6px 0 8px;flex-wrap:wrap}
+.tot b{font-size:21px;color:var(--maroon)}
+.utr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:#f6f1e8;border-radius:7px;padding:2px 7px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.acts .btn{flex:1 1 auto}
+.eta{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.eta select{border:1.5px solid var(--line);border-radius:8px;padding:3px 6px;background:#fff;font-size:12.5px}
+.tl{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+.tl b{color:var(--brown);font-weight:600}
+.more{color:var(--maroon);font-weight:700;font-size:12.5px;background:none;text-decoration:underline}
+
+/* ---------- lists (history / customers) ---------- */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{min-height:40px;border:1.5px solid var(--line);border-radius:12px;padding:7px 12px;background:#fff;outline:0}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--orange)}
+.toolbar .grow{flex:1 1 200px}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}
+.row{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer;transition:transform .12s}
+.row:hover{transform:translateY(-1px)}
+.row h3{font-size:16px;color:var(--maroon);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.row h3 small{color:var(--muted);font-size:12.5px;font-weight:600;margin-left:auto}
+.row p{font-size:13.5px;color:var(--muted);margin-top:3px}
+.row .kv{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:13px}
+.row .kv b{color:var(--brown)}
+.pager{text-align:center;margin:16px 0}
+
+/* ---------- settings ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+.card h2{font-size:17px;color:var(--maroon);margin-bottom:4px}
+.card>p{font-size:13.5px;color:var(--muted);margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
+.qr-prev{width:180px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.qr-prev svg{display:block;width:100%;height:auto}
+.admins li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.admins li:last-child{border:0}
+.admins li span{margin-left:auto}
+code{background:#f3eadb;border-radius:6px;padding:1px 6px;font-size:13px}
+
+/* ---------- modal ---------- */
+dialog{border:0;padding:0;background:transparent;max-width:min(560px,94vw);width:100%}
+dialog::backdrop{background:#2b0f04b0;backdrop-filter:blur(3px)}
+.modal{background:var(--page);border-radius:20px;padding:18px;max-height:88vh;overflow:auto;box-shadow:0 30px 70px #3a120540}
+.modal h2{font-size:19px;color:var(--maroon);display:flex;align-items:center;gap:10px}
+.modal h2 button{margin-left:auto}
+.modal .sub{color:var(--muted);font-size:13.5px;margin:2px 0 12px}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#2b1a0e;color:#ffe9cd;padding:11px 18px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:0 12px 30px #0006;z-index:50;opacity:0;pointer-events:none;transition:opacity .25s}
+.toast.show{opacity:1}
+.banner{background:#fff3d9;border:1px solid #dcbc8d;color:#6d5138;border-radius:14px;padding:10px 14px;font-size:14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner.red{background:#fdecea;border-color:#f2b8b0;color:#8f2214}
+.banner .btn{margin-left:auto}
+@media (max-width:700px){.topbar{padding:8px 10px;gap:6px}.brand{font-size:15px}.brand img{width:28px;height:28px}.tb-btn{padding:5px 9px;font-size:12px;min-height:32px;border-radius:9px}.tb-label{display:none}.tb-mobile{display:inline}.tabs button{padding:8px 11px 10px;font-size:13px}main{padding:10px}.stats{gap:8px}.stat{padding:10px 12px}.stat b{font-size:20px}}
+@media print{body>*{display:none!important}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="/icons/icon-192.png" alt=""><div>Balaji Orders<small>Shop dashboard</small></div></div>
+  <div class="tb-right" id="tb-right" hidden>
+    <span class="tb-btn" title="Connection"><span class="dot" id="conn-dot"></span><span id="conn-text" class="tb-label">Connecting…</span></span>
+    <label class="tb-btn"><span class="tb-label">Outlet</span><select id="outlet-filter"><option value="all">All outlets</option></select></label>
+    <label class="switch tb-btn" title="Accept online orders"><input type="checkbox" id="accepting"><i></i><span><span class="tb-label">Accepting orders</span><span class="tb-mobile">Online</span></span></label>
+    <button class="tb-btn" id="sound-btn" type="button" title="New order sound">Sound</button>
+    <button class="tb-btn" id="logout-btn" type="button">Log out</button>
+  </div>
+</header>
+<nav class="tabs" id="tabs" hidden>
+  <button data-view="live" class="on">Live orders <span class="cnt" id="cnt-new" hidden>0</span></button>
+  <button data-view="history">All orders</button>
+  <button data-view="customers">Customers</button>
+  <button data-view="enquiries">Franchise enquiries</button>
+  <button data-view="settings">Settings</button>
+</nav>
+<main id="main"></main>
+<dialog id="modal"><div class="modal" id="modal-body"></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+<audio id="ding" preload="auto" hidden></audio>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, startAfter, onSnapshot, connectFirestoreEmulator } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+/* ───────── config (same project as the website) ───────── */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCkbINUf6AtFovRrdU-3i56t2_PVaxaZwk",
+  authDomain: "balaji-pauva-house.firebaseapp.com",
+  projectId: "balaji-pauva-house",
+  storageBucket: "balaji-pauva-house.firebasestorage.app",
+  messagingSenderId: "80949415947",
+  appId: "1:80949415947:web:07686be218954fbc82370e"
+};
+const OUTLETS = ['C.T.M. Cross Road', 'New Maninagar', 'Vastral', 'Maninagar'];
+const SHOP_PHONE = '+91 81549 59798';
+const ACTIVE = ['received', 'confirmed', 'preparing', 'ready', 'out'];
+const STATUS_LABEL = { received: 'New', confirmed: 'Accepted', preparing: 'Cooking', ready: 'Ready', out: 'Out for delivery', completed: 'Completed', cancelled: 'Cancelled' };
+
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = getFirestore(app);
+/* local developer testing only: Firebase emulators when localStorage bph-emulator is set (never in production) */
+try { const emu = localStorage.getItem('bph-emulator'); if (emu) { const h = emu.split(':')[0] || '127.0.0.1'; connectFirestoreEmulator(db, h, 8080); connectAuthEmulator(auth, 'http://' + h + ':9099', { disableWarnings: true }); } } catch (_) {}
+
+/* ───────── helpers ───────── */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = n => '₹' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-IN');
+const pad = n => String(n).padStart(2, '0');
+const clock = ts => { if (!ts) return '—'; const d = new Date(ts); let h = d.getHours() % 12 || 12; return h + ':' + pad(d.getMinutes()) + (d.getHours() >= 12 ? ' PM' : ' AM'); };
+const dateStr = ts => { const d = new Date(ts); return pad(d.getDate()) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getFullYear(); };
+const ago = ts => { const m = Math.floor((Date.now() - ts) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.floor(m / 60); if (h < 24) return h + ' hr ago'; return dateStr(ts); };
+const shortId = id => String(id || '').split('-').pop();
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const fmtPhone = p => { const s = String(p || '').replace(/\D/g, '').slice(-10); return s.length === 10 ? s.slice(0, 5) + ' ' + s.slice(5) : (p || ''); };
+const mapsLink = a => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a);
+let toastT; const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); };
+const I = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+  bike: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>',
+  bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="8"/></svg>',
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+  rupee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  bellOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+};
+
+/* ───────── state ───────── */
+const S = {
+  user: null, admin: false, view: 'live', outlet: localStorage.getItem('bph-outlet') || 'all',
+  sound: localStorage.getItem('bph-sound') !== 'off',
+  orders: new Map(), seen: new Set(), booted: false, newIds: new Set(),
+  history: [], histCursor: null, histDone: false, histQ: '', histStatus: 'all', histFrom: '', histTo: '',
+  customers: [], custQ: '', enquiries: [], settings: {}, unsubs: []
+};
+
+/* ───────── sound / notifications ───────── */
+let actx = null;
+function beep(n = 2) {
+  if (!S.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const t0 = actx.currentTime;
+    for (let i = 0; i < n; i++) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(i % 2 ? 660 : 880, t0 + i * .32);
+      g.gain.setValueAtTime(.0001, t0 + i * .32);
+      g.gain.exponentialRampToValueAtTime(.5, t0 + i * .32 + .02);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + i * .32 + .3);
+      o.connect(g).connect(actx.destination); o.start(t0 + i * .32); o.stop(t0 + i * .32 + .32);
+    }
+  } catch (_) {}
+}
+function notify(o) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const items = (o.items || []).map(i => i.qty + '× ' + i.name).join(', ');
+    const n = new Notification('New order #' + shortId(o.id) + ' · ' + money(o.total), { body: (o.mode === 'pickup' ? 'Pickup · ' : 'Delivery · ') + (o.outlet || '') + '\n' + items, tag: o.id, icon: '/icons/icon-192.png' });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (_) {}
+}
+const baseTitle = 'Balaji Orders — Shop Dashboard';
+let titleFlip = false;
+setInterval(() => {
+  const n = [...S.orders.values()].filter(o => o.status === 'received' && outletOk(o)).length;
+  if (n) { titleFlip = !titleFlip; document.title = titleFlip ? `(${n}) NEW ORDER!` : `(${n}) ${baseTitle}`; }
+  else if (document.title !== baseTitle) document.title = baseTitle;
+}, 1000);
+/* ring again every 9 s while an order is waiting to be accepted */
+setInterval(() => { if (S.admin && [...S.orders.values()].some(o => o.status === 'received' && outletOk(o))) beep(3); }, 9000);
+/* refresh "x min ago" */
+setInterval(() => { if (S.admin && S.view === 'live') renderLive(); }, 30000);
+
+/* ───────── auth ───────── */
+onAuthStateChanged(auth, async u => {
+  S.user = u;
+  if (!u) { S.admin = false; stopListeners(); showLogin(); return; }
+  const ok = await checkAdmin(u);
+  if (!ok) { showNotAdmin(u); return; }
+  S.admin = true;
+  $('#tb-right').hidden = false; $('#tabs').hidden = false;
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (_) {}
+  startListeners();
+  setView('live');
+});
+async function checkAdmin(u) {
+  const emails = [...new Set([u.email || '', (u.email || '').toLowerCase()])].filter(Boolean);
+  for (const e of emails) { try { const s = await getDoc(doc(db, 'admins', e)); if (s.exists()) return true; } catch (_) {} }
+  return false;
+}
+function showLogin(msg, type) {
+  $('#tb-right').hidden = true; $('#tabs').hidden = true;
+  $('#main').innerHTML = `<div class="login-wrap"><form class="login" id="login-form" novalidate>
+    <h1>Staff login</h1><p>Balaji Pauva House · live order board</p>
+    <div class="f"><label for="l-email">Email</label><input id="l-email" type="email" autocomplete="username" required></div>
+    <div class="f"><label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
+    <p class="msg ${msg ? 'show ' + (type || 'err') : ''}" id="l-msg">${esc(msg || '')}</p>
+    <button class="btn p wide" id="l-btn" type="submit">Log in</button>
+    <p style="text-align:center;margin-top:12px;font-size:13px"><button type="button" class="more" id="l-forgot">Forgot password?</button></p>
+  </form></div>`;
+  $('#login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const b = $('#l-btn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>Logging in…';
+    try { beep(0); await signInWithEmailAndPassword(auth, $('#l-email').value.trim(), $('#l-pass').value); }
+    catch (err) { const m = $('#l-msg'); m.textContent = friendly(err); m.className = 'msg show err'; b.disabled = false; b.textContent = 'Log in'; }
+  });
+  $('#l-forgot').addEventListener('click', async () => {
+    const em = $('#l-email').value.trim(); const m = $('#l-msg');
+    if (!em) { m.textContent = 'Type your email first.'; m.className = 'msg show info'; return; }
+    try { await sendPasswordResetEmail(auth, em); m.textContent = 'Reset link sent to ' + em; m.className = 'msg show ok'; } catch (err) { m.textContent = friendly(err); m.className = 'msg show err'; }
+  });
+}
+function showNotAdmin(u) {
+  $('#tb-right').hidden = true; $('#tabs').hidden = true;
+  $('#main').innerHTML = `<div class="login-wrap"><div class="login">
+    <h1>Not a staff account</h1>
+    <p><b>${esc(u.email)}</b> is signed in but is not listed as an admin.</p>
+    <p>To allow this account: Firebase console → Firestore → collection <code>admins</code> → add a document with ID exactly <code>${esc(u.email)}</code> (any field, e.g. <code>role: "owner"</code>). Then reload.</p>
+    <button class="btn p wide" id="na-out" type="button">Log out</button></div></div>`;
+  $('#na-out').addEventListener('click', () => signOut(auth));
+}
+const friendly = e => ({ 'auth/invalid-credential': 'Email or password is incorrect.', 'auth/wrong-password': 'Email or password is incorrect.', 'auth/user-not-found': 'No account with this email.', 'auth/too-many-requests': 'Too many attempts — wait a minute.', 'auth/network-request-failed': 'No internet connection.', 'auth/invalid-email': 'That email does not look right.' })[(e && e.code) || ''] || ('Could not log in (' + ((e && e.code) || 'error') + ').');
+$('#logout-btn').addEventListener('click', () => signOut(auth));
+
+/* ───────── live listeners ───────── */
+function stopListeners() { S.unsubs.forEach(u => { try { u(); } catch (_) {} }); S.unsubs = []; S.orders.clear(); S.seen.clear(); S.booted = false; }
+function startListeners() {
+  stopListeners();
+  const since = Date.now() - 36 * 3600e3;
+  const q1 = query(collection(db, 'orders'), where('placedAt', '>=', since));
+  const q2 = query(collection(db, 'orders'), where('status', 'in', ACTIVE));
+  const onErr = e => { setConn(false, e && e.code === 'permission-denied' ? 'No permission — publish firestore.rules' : 'Connection error'); console.warn(e); };
+  let first1 = true;
+  S.unsubs.push(onSnapshot(q1, snap => {
+    snap.docChanges().forEach(ch => {
+      const o = ch.doc.data(); o._id = ch.doc.id;
+      if (ch.type === 'removed') { S.orders.delete(o._id); return; }
+      const fresh = !S.seen.has(o._id);
+      S.orders.set(o._id, o); S.seen.add(o._id);
+      if (fresh && S.booted && o.status === 'received') { S.newIds.add(o._id); beep(3); notify(o); toast('New order #' + shortId(o.id) + ' · ' + money(o.total)); }
+    });
+    if (first1) { first1 = false; S.booted = true; }
+    setConn(true); renderIfLive();
+  }, onErr));
+  S.unsubs.push(onSnapshot(q2, snap => {
+    snap.docChanges().forEach(ch => {
+      const o = ch.doc.data(); o._id = ch.doc.id;
+      if (ch.type === 'removed') { const cur = S.orders.get(o._id); if (cur && (cur.placedAt || 0) < since) S.orders.delete(o._id); return; }
+      S.orders.set(o._id, o); S.seen.add(o._id);
+    });
+    renderIfLive();
+  }, onErr));
+  S.unsubs.push(onSnapshot(doc(db, 'settings', 'store'), snap => {
+    S.settings = snap.exists() ? snap.data() : {};
+    $('#accepting').checked = S.settings.acceptingOrders !== false;
+    if (S.view === 'settings') renderSettings();
+  }, () => {}));
+}
+function setConn(on, text) { $('#conn-dot').className = 'dot ' + (on ? 'on' : 'off'); $('#conn-text').textContent = text || (on ? 'Live' : 'Offline'); }
+const outletOk = o => S.outlet === 'all' || (o.outlet || '') === S.outlet;
+function renderIfLive() { updateNewCount(); if (S.view === 'live') renderLive(); }
+function updateNewCount() {
+  const n = [...S.orders.values()].filter(o => o.status === 'received' && outletOk(o)).length;
+  const c = $('#cnt-new'); c.textContent = n; c.hidden = !n;
+}
+
+/* ───────── top bar controls ───────── */
+const of = $('#outlet-filter');
+OUTLETS.forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o; of.appendChild(op); });
+of.value = S.outlet;
+of.addEventListener('change', () => { S.outlet = of.value; localStorage.setItem('bph-outlet', S.outlet); renderIfLive(); if (S.view !== 'live') setView(S.view); });
+const sb = $('#sound-btn');
+const paintSound = () => { sb.innerHTML = (S.sound ? I.bell : I.bellOff) + '<span class="tb-label">' + (S.sound ? 'Sound on' : 'Sound off') + '</span>'; sb.classList.toggle('alert', !S.sound); };
+paintSound();
+sb.addEventListener('click', () => { S.sound = !S.sound; localStorage.setItem('bph-sound', S.sound ? 'on' : 'off'); paintSound(); if (S.sound) beep(2); });
+$('#accepting').addEventListener('change', async e => {
+  const on = e.target.checked;
+  try { await setDoc(doc(db, 'settings', 'store'), { acceptingOrders: on, updatedAt: Date.now(), updatedBy: S.user.email }, { merge: true }); toast(on ? 'Accepting online orders ✓' : 'Online orders PAUSED — website shows "paused"'); }
+  catch (err) { e.target.checked = !on; toast('Could not save: ' + (err.code || err.message)); }
+});
+$$('#tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+function setView(v) {
+  S.view = v;
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  ({ live: renderLive, history: renderHistory, customers: renderCustomers, enquiries: renderEnquiries, settings: renderSettings })[v]();
+  window.scrollTo({ top: 0 });
+}
+
+/* ───────── order actions ───────── */
+async function patch(o, data, okMsg) {
+  try { await updateDoc(doc(db, 'orders', o._id || o.id), Object.assign({ updatedAt: Date.now(), lastActionBy: S.user.email }, data)); if (okMsg) toast(okMsg); return true; }
+  catch (err) { toast('Failed: ' + (err.code === 'permission-denied' ? 'no permission (publish firestore.rules)' : err.message)); return false; }
+}
+const ACTIONS = {
+  accept: o => patch(o, { status: 'preparing', confirmedAt: Date.now(), preparingAt: Date.now() }, 'Accepted — cooking #' + shortId(o.id)),
+  ready: o => patch(o, { status: 'ready', readyAt: Date.now() }, '#' + shortId(o.id) + ' marked ready'),
+  out: o => patch(o, { status: 'out', outAt: Date.now() }, '#' + shortId(o.id) + ' out for delivery'),
+  complete: o => {
+    const d = { status: 'completed', completedAt: Date.now() };
+    if ((o.payment || {}).method !== 'upi' && (o.payment || {}).status !== 'paid') { d['payment.status'] = 'paid'; d['payment.paidAt'] = Date.now(); d['payment.via'] = 'cash'; }
+    return patch(o, d, '#' + shortId(o.id) + ' completed');
+  },
+  paid: o => patch(o, { 'payment.status': 'paid', 'payment.paidAt': Date.now(), 'payment.verifiedBy': S.user.email, 'payment.via': (o.payment || {}).method === 'upi' ? 'upi' : 'cash' }, 'Payment marked PAID for #' + shortId(o.id)),
+  unpaid: o => patch(o, { 'payment.status': 'pending', 'payment.paidAt': null, 'payment.verifiedBy': null }, 'Payment reset to pending'),
+  cancel: async o => {
+    const r = prompt('Cancel / reject order #' + shortId(o.id) + '?\nReason shown to the customer:', 'Item not available right now');
+    if (r === null) return;
+    return patch(o, { status: 'cancelled', cancelReason: r || 'Cancelled by the shop', cancelledAt: Date.now(), cancelledBy: 'shop' }, 'Order cancelled');
+  },
+  eta: (o, v) => patch(o, { eta: Number(v) || 18 }),
+  del: async o => {
+    if (!confirm('Permanently delete order ' + o.id + '? This cannot be undone.')) return;
+    try { await deleteDoc(doc(db, 'orders', o._id || o.id)); S.orders.delete(o._id || o.id); S.history = S.history.filter(x => x._id !== (o._id || o.id)); toast('Deleted'); setView(S.view); } catch (err) { toast('Failed: ' + err.message); }
+  },
+  print: o => printOrder(o)
+};
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = b.dataset.id; const o = S.orders.get(id) || S.history.find(x => x._id === id) || (S.custOrders || []).find(x => x._id === id);
+  if (!o) return;
+  b.disabled = true;
+  try { await ACTIONS[b.dataset.act](o, b.dataset.val); } finally { b.disabled = false; }
+});
+document.addEventListener('change', e => {
+  const s = e.target.closest('select[data-eta]'); if (!s) return;
+  const o = S.orders.get(s.dataset.eta); if (o) ACTIONS.eta(o, s.value);
+});
+
+/* ───────── rendering: order card ───────── */
+function payChip(o) {
+  const p = o.payment || { method: 'cod', status: 'pending' };
+  if (p.method === 'upi') {
+    if (p.status === 'paid') return `<span class="chip paid">${I.check}UPI paid</span>`;
+    if (p.status === 'claimed') return `<span class="chip claim">UPI · customer says paid</span>`;
+    return `<span class="chip due">UPI · NOT PAID</span>`;
+  }
+  if (p.status === 'paid') return `<span class="chip paid">${I.check}Cash received</span>`;
+  return `<span class="chip cod">${o.mode === 'pickup' ? 'Pay at counter' : 'COD · collect ' + money(o.total)}</span>`;
+}
+function actionButtons(o) {
+  const s = o.status, p = o.payment || {}, A = [];
+  const btn = (act, cls, label, icon = '') => `<button class="btn ${cls}" data-act="${act}" data-id="${esc(o._id)}">${icon}${label}</button>`;
+  if (s === 'received') { A.push(btn('accept', 'g', 'Accept & start cooking', I.check)); A.push(btn('cancel', 'd', 'Reject', I.x)); }
+  else if (s === 'confirmed' || s === 'preparing') {
+    if (o.mode === 'pickup') A.push(btn('ready', 'g', 'Ready for pickup', I.bag));
+    else { A.push(btn('ready', 'o', 'Packed', I.bag)); A.push(btn('out', 'g', 'Out for delivery', I.bike)); }
+  }
+  else if (s === 'ready') { A.push(o.mode === 'pickup' ? btn('complete', 'g', 'Collected ✓') : btn('out', 'g', 'Out for delivery', I.bike)); }
+  else if (s === 'out') { A.push(btn('complete', 'g', 'Delivered ✓')); }
+  if (ACTIVE.includes(s) && s !== 'received') A.push(btn('cancel', 'd sm', 'Cancel', I.x));
+  if (p.method === 'upi' && p.status !== 'paid' && s !== 'cancelled') A.push(btn('paid', 'b', p.status === 'claimed' ? 'Verify ✓ mark paid' : 'Mark paid', I.rupee));
+  else if (p.status === 'paid' && ACTIVE.includes(s)) A.push(btn('unpaid', 'sm', 'Undo paid'));
+  else if (p.method !== 'upi' && p.status !== 'paid' && ACTIVE.includes(s) && s !== 'received') A.push(btn('paid', 'sm', 'Cash received', I.rupee));
+  A.push(btn('print', 'sm', 'Print', I.print));
+  if (s === 'completed' || s === 'cancelled') A.push(btn('del', 'd sm', '', I.trash));
+  return A.join('');
+}
+function orderCard(o, opts = {}) {
+  const p = o.payment || {};
+  const items = (o.items || []).map(i => `<li><b>${esc(i.qty)}×</b>${esc(i.name)}<span>${money((i.price || 0) * i.qty)}</span></li>`).join('');
+  const tl = [['Placed', o.placedAt], ['Accepted', o.confirmedAt], ['Ready', o.readyAt], ['Out', o.outAt], ['Done', o.completedAt], ['Cancelled', o.cancelledAt], ['Paid', p.paidAt]]
+    .filter(x => x[1]).map(x => `<b>${x[0]}</b> ${clock(x[1])}`).join(' → ');
+  const isNew = S.newIds.has(o._id);
+  return `<article class="oc s-${esc(o.status)}${isNew ? ' is-new' : ''}" data-oid="${esc(o._id)}">
+    <div class="oc-head"><span class="oc-id">#${esc(shortId(o.id))}<small>${esc(o.id)}</small></span>
+      <span class="oc-time"><b>${clock(o.placedAt)}</b>${ago(o.placedAt)}${opts.date ? ' · ' + dateStr(o.placedAt) : ''}</span></div>
+    <div class="chips">
+      <span class="chip ${o.mode === 'pickup' ? 'pickup' : 'delivery'}">${o.mode === 'pickup' ? 'Pickup' : 'Delivery'}${o.outlet ? ' · ' + esc(o.outlet) : ''}</span>
+      ${payChip(o)}
+      ${ACTIVE.includes(o.status) ? `<span class="chip st">${STATUS_LABEL[o.status] || o.status}</span>` : `<span class="chip ${o.status === 'cancelled' ? 'cancel' : ''}">${STATUS_LABEL[o.status] || o.status}</span>`}
+      ${o.source === 'web' ? '' : '<span class="chip">' + esc(o.source || 'web') + '</span>'}
+    </div>
+    <div class="cust"><b>${esc(o.name || 'Guest')}</b> · <a href="tel:+91${esc(String(o.phone || '').replace(/\D/g, '').slice(-10))}">${I.phone} ${esc(fmtPhone(o.phone))}</a>
+      ${o.mode === 'delivery' && o.address ? `<div class="addr">${I.pin} ${esc(o.address)} <a href="${mapsLink(o.address)}" target="_blank" rel="noopener">Map ↗</a></div>` : ''}
+      ${o.email ? `<div class="addr">${esc(o.email)}</div>` : ''}</div>
+    <ul class="items">${items}</ul>
+    ${o.note ? `<div class="note">${I.note} <b>Note:</b> ${esc(o.note)}</div>` : ''}
+    ${o.status === 'cancelled' ? `<div class="note" style="background:#fdeeee;border-color:#f3bcbc;color:#9c2a1e">✕ ${o.cancelledBy === 'customer' ? 'Cancelled by the customer' : 'Cancelled by shop'}${o.cancelReason && !/cancelled by (the )?customer/i.test(o.cancelReason) ? ' — ' + esc(o.cancelReason) : ''}</div>` : ''}
+    <div class="tot"><span>Sub ${money(o.subtotal)} · GST ${money(o.tax)}${o.delivery ? ' · Del ' + money(o.delivery) : ''}${o.roundOff ? ' · R/O ' + (o.roundOff > 0 ? '+' : '') + Number(o.roundOff).toFixed(2) : ''}</span><b>${money(o.total)}</b></div>
+    ${p.method === 'upi' && p.utr ? `<div style="font-size:13px;margin:-2px 0 6px">UTR / ref: <span class="utr">${esc(p.utr)}</span>${p.claimedAt ? ' <small style="color:var(--muted)">reported ' + clock(p.claimedAt) + '</small>' : ''}</div>` : ''}
+    ${p.method === 'upi' && p.status !== 'paid' && o.status !== 'cancelled' ? `<div style="font-size:12.5px;color:var(--muted);margin:-2px 0 6px">Check your UPI app for <b>${money(p.amount || o.total)}</b> with note “Balaji order ${esc(shortId(o.id))}”, then mark paid.</div>` : ''}
+    <div class="acts">${actionButtons(o)}</div>
+    ${o.status === 'received' || o.status === 'preparing' ? `<div class="eta">${I.clock} Ready in <select data-eta="${esc(o._id)}">${[10, 15, 20, 25, 30, 40, 50, 60].map(m => `<option value="${m}"${(o.eta || 18) == m || (!([10, 15, 20, 25, 30, 40, 50, 60].includes(o.eta || 18)) && m === 20) ? ' selected' : ''}>${m} min</option>`).join('')}</select> <span>(customer sees this)</span></div>` : ''}
+    ${tl ? `<div class="tl">${tl}</div>` : ''}
+  </article>`;
+}
+
+/* ───────── view: live board ───────── */
+function renderLive() {
+  updateNewCount();
+  const all = [...S.orders.values()].filter(outletOk).sort((a, b) => (a.placedAt || 0) - (b.placedAt || 0));
+  const today = startOfToday();
+  const col = (title, cls, list, newestFirst) => {
+    const arr = newestFirst ? [...list].reverse() : list;
+    return `<section class="col ${cls}"><h2>${title}<span class="cnt">${arr.length}</span></h2>${arr.length ? arr.map(o => orderCard(o)).join('') : '<p class="empty">Nothing here</p>'}</section>`;
+  };
+  const neu = all.filter(o => o.status === 'received');
+  const cook = all.filter(o => o.status === 'confirmed' || o.status === 'preparing');
+  const ready = all.filter(o => o.status === 'ready' || o.status === 'out');
+  const done = all.filter(o => (o.status === 'completed' || o.status === 'cancelled') && (o.placedAt || 0) >= today);
+  const todays = all.filter(o => (o.placedAt || 0) >= today);
+  const sales = todays.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const pendingPay = all.filter(o => ACTIVE.includes(o.status) && (o.payment || {}).method === 'upi' && (o.payment || {}).status !== 'paid').length;
+  const claims = all.filter(o => (o.payment || {}).status === 'claimed').length;
+  $('#main').innerHTML = `
+    ${S.settings.acceptingOrders === false ? '<div class="banner red"><b>PAUSED:</b> Online ordering is off — customers see “Online orders paused”. Switch it back on in the top bar.</div>' : ''}
+    <div class="stats">
+      <div class="stat"><b>${todays.filter(o => o.status !== 'cancelled').length}</b><span>Orders today</span></div>
+      <div class="stat"><b>${money(sales)}</b><span>Sales today</span></div>
+      <div class="stat ${neu.length ? 'warn' : ''}"><b>${neu.length}</b><span>Waiting to accept</span></div>
+      <div class="stat ${claims ? 'warn' : ''}"><b>${claims}</b><span>UPI to verify</span></div>
+      <div class="stat"><b>${pendingPay}</b><span>UPI unpaid (active)</span></div>
+    </div>
+    <div class="board">
+      ${col(I.bell + ' New', 'new', neu)}
+      ${col(I.flame + ' In the kitchen', 'cook', cook)}
+      ${col(I.bike + ' Ready / on the way', 'ready', ready)}
+      ${col(I.box + ' Done today', 'done', done, true)}
+    </div>`;
+  S.newIds.clear();
+}
+
+/* ───────── view: history ───────── */
+async function loadHistory(reset) {
+  if (reset) { S.history = []; S.histCursor = null; S.histDone = false; }
+  if (S.histDone) return;
+  let q;
+  const from = S.histFrom ? new Date(S.histFrom + 'T00:00:00').getTime() : null;
+  const to = S.histTo ? new Date(S.histTo + 'T23:59:59.999').getTime() : null;
+  const parts = [collection(db, 'orders')];
+  if (from) parts.push(where('placedAt', '>=', from));
+  if (to) parts.push(where('placedAt', '<=', to));
+  parts.push(orderBy('placedAt', 'desc'));
+  if (S.histCursor != null) parts.push(startAfter(S.histCursor));
+  parts.push(limit(150));
+  q = query(...parts);
+  try {
+    const snap = await getDocs(q);
+    snap.forEach(d => { const o = d.data(); o._id = d.id; S.history.push(o); });
+    if (snap.size < 150) S.histDone = true;
+    if (snap.size) S.histCursor = snap.docs[snap.docs.length - 1].data().placedAt;
+  } catch (err) { toast('Could not load: ' + (err.code || err.message)); S.histDone = true; }
+}
+function histFiltered() {
+  const q = S.histQ.trim().toLowerCase();
+  return S.history.filter(o => outletOk(o) && (S.histStatus === 'all' || o.status === S.histStatus || (S.histStatus === 'unpaid' && (o.payment || {}).status !== 'paid' && o.status !== 'cancelled'))
+    && (!q || [o.id, o.name, o.phone, o.address, (o.payment || {}).utr].join(' ').toLowerCase().includes(q)));
+}
+async function renderHistory() {
+  const m = $('#main');
+  if (!S.history.length && !S.histDone) { m.innerHTML = '<p class="empty">Loading orders…</p>'; await loadHistory(true); if (S.view !== 'history') return; }
+  const list = histFiltered();
+  const sales = list.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (Number(o.total) || 0), 0);
+  m.innerHTML = `
+    <div class="toolbar">
+      <input class="grow" id="h-q" placeholder="Search order id, name, phone, UTR…" value="${esc(S.histQ)}">
+      <select id="h-status">${['all', 'received', 'preparing', 'ready', 'out', 'completed', 'cancelled', 'unpaid'].map(s => `<option value="${s}"${S.histStatus === s ? ' selected' : ''}>${s === 'all' ? 'All statuses' : s === 'unpaid' ? 'Payment pending' : STATUS_LABEL[s] || s}</option>`).join('')}</select>
+      <input type="date" id="h-from" value="${esc(S.histFrom)}" title="From"> <input type="date" id="h-to" value="${esc(S.histTo)}" title="To">
+      <button class="btn" id="h-apply">Apply</button>
+      <button class="btn" id="h-csv">Export CSV</button>
+    </div>
+    <p style="color:var(--muted);font-size:13.5px;margin-bottom:10px">${list.length} orders shown · ${money(sales)} (excl. cancelled)${S.histDone ? '' : ' · more available'}</p>
+    <div class="list">${list.map(o => orderCard(o, { date: true })).join('') || '<p class="empty">No orders match.</p>'}</div>
+    ${S.histDone ? '' : '<div class="pager"><button class="btn" id="h-more">Load older orders</button></div>'}`;
+  $('#h-q').addEventListener('input', e => { S.histQ = e.target.value; clearTimeout(renderHistory._t); renderHistory._t = setTimeout(renderHistory, 250); });
+  $('#h-status').addEventListener('change', e => { S.histStatus = e.target.value; renderHistory(); });
+  $('#h-apply').addEventListener('click', async () => { S.histFrom = $('#h-from').value; S.histTo = $('#h-to').value; await loadHistory(true); renderHistory(); });
+  $('#h-more')?.addEventListener('click', async () => { await loadHistory(false); renderHistory(); });
+  $('#h-csv').addEventListener('click', () => exportCsv(histFiltered()));
+}
+function exportCsv(list) {
+  const cols = ['id', 'placedAt', 'status', 'mode', 'outlet', 'name', 'phone', 'address', 'items', 'subtotal', 'tax', 'delivery', 'total', 'payMethod', 'payStatus', 'utr', 'note'];
+  const rows = list.map(o => [o.id, new Date(o.placedAt).toLocaleString('en-IN'), o.status, o.mode, o.outlet, o.name, o.phone, o.address, (o.items || []).map(i => i.qty + 'x ' + i.name).join('; '), o.subtotal, o.tax, o.delivery, o.total, (o.payment || {}).method, (o.payment || {}).status, (o.payment || {}).utr, o.note]);
+  const csv = [cols, ...rows].map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = 'balaji-orders-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+}
+
+/* ───────── view: customers ───────── */
+async function loadCustomers() {
+  try {
+    const snap = await getDocs(query(collection(db, 'customers'), orderBy('lastOrderAt', 'desc'), limit(400)));
+    S.customers = []; snap.forEach(d => S.customers.push(Object.assign({ _id: d.id }, d.data())));
+  } catch (err) { toast('Could not load customers: ' + (err.code || err.message)); }
+  /* also fold in anyone who ordered but has no customer doc yet (older orders) */
+  const have = new Set(S.customers.map(c => c.phone));
+  const extra = new Map();
+  [...S.orders.values(), ...S.history].forEach(o => {
+    const ph = String(o.phone || '').replace(/\D/g, '').slice(-10); if (ph.length !== 10 || have.has(ph)) return;
+    const c = extra.get(ph) || { _id: ph, phone: ph, name: o.name, orders: 0, spend: 0, lastOrderAt: 0, lastAddress: '', derived: true };
+    c.orders++; c.spend += Number(o.total) || 0; if ((o.placedAt || 0) > c.lastOrderAt) { c.lastOrderAt = o.placedAt; c.name = o.name || c.name; c.lastAddress = o.address || c.lastAddress; }
+    extra.set(ph, c);
+  });
+  S.customers = [...S.customers, ...extra.values()].sort((a, b) => (b.lastOrderAt || 0) - (a.lastOrderAt || 0));
+}
+async function renderCustomers() {
+  const m = $('#main');
+  if (!S.customers.length) { m.innerHTML = '<p class="empty">Loading customers…</p>'; await loadCustomers(); if (S.view !== 'customers') return; }
+  const q = S.custQ.trim().toLowerCase();
+  const list = S.customers.filter(c => !q || [c.name, c.phone, c.lastAddress, c.email].join(' ').toLowerCase().includes(q));
+  const totalSpend = S.customers.reduce((s, c) => s + (Number(c.spend) || 0), 0);
+  m.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${S.customers.length}</b><span>Customers</span></div>
+      <div class="stat"><b>${S.customers.filter(c => (c.orders || 0) > 1).length}</b><span>Repeat customers</span></div>
+      <div class="stat"><b>${money(totalSpend)}</b><span>Lifetime sales</span></div>
+    </div>
+    <div class="toolbar"><input class="grow" id="c-q" placeholder="Search name, phone, address…" value="${esc(S.custQ)}"><button class="btn" id="c-reload">Refresh</button></div>
+    <div class="list">${list.map(c => `<div class="row" data-cust="${esc(c.phone)}">
+      <h3>${esc(c.name || 'Guest')}<small>${c.lastOrderAt ? ago(c.lastOrderAt) : ''}</small></h3>
+      <p>${I.phone} ${esc(fmtPhone(c.phone))}${c.email ? ' · ' + esc(c.email) : ''}</p>
+      ${c.lastAddress ? `<p>${I.pin} ${esc(c.lastAddress)}</p>` : ''}
+      <div class="kv"><span>Orders <b>${esc(c.orders || 0)}</b></span><span>Spent <b>${money(c.spend)}</b></span>${c.lastOutlet ? `<span>Outlet <b>${esc(c.lastOutlet)}</b></span>` : ''}${c.note ? `<span>Note <b>${esc(c.note)}</b></span>` : ''}</div>
+    </div>`).join('') || '<p class="empty">No customers yet.</p>'}</div>`;
+  $('#c-q').addEventListener('input', e => { S.custQ = e.target.value; clearTimeout(renderCustomers._t); renderCustomers._t = setTimeout(renderCustomers, 200); });
+  $('#c-reload').addEventListener('click', async () => { S.customers = []; renderCustomers(); });
+  $$('[data-cust]').forEach(el => el.addEventListener('click', () => openCustomer(el.dataset.cust)));
+}
+async function openCustomer(phone) {
+  const c = S.customers.find(x => x.phone === phone) || { phone };
+  openModal(`<h2>${esc(c.name || 'Guest')} <button class="btn sm" data-close>${I.x}</button></h2>
+    <p class="sub"><a href="tel:+91${esc(phone)}">${esc(fmtPhone(phone))}</a>${c.email ? ' · ' + esc(c.email) : ''} · ${esc(c.orders || 0)} orders · ${money(c.spend)}</p>
+    ${(c.addresses || []).length ? '<p class="sub">Addresses:<br>' + c.addresses.map(a => I.pin + ' ' + esc(a)).join('<br>') + '</p>' : ''}
+    <div class="f"><label>Staff note (private)</label><input id="cn-note" value="${esc(c.note || '')}" placeholder="e.g. regular, prefers less spicy"> </div>
+    <button class="btn p sm" id="cn-save">Save note</button>
+    <div id="cust-orders" style="margin-top:14px"><p class="empty">Loading orders…</p></div>`);
+  $('#cn-save').addEventListener('click', async () => {
+    try { await setDoc(doc(db, 'customers', phone), { phone, note: $('#cn-note').value.trim(), updatedAt: Date.now() }, { merge: true }); c.note = $('#cn-note').value.trim(); toast('Saved'); } catch (err) { toast('Failed: ' + err.message); }
+  });
+  try {
+    const snap = await getDocs(query(collection(db, 'orders'), where('customerKey', '==', phone), limit(100)));
+    let list = []; snap.forEach(d => { const o = d.data(); o._id = d.id; list.push(o); });
+    if (!list.length) { const s2 = await getDocs(query(collection(db, 'orders'), where('phone', '==', phone), limit(100))); s2.forEach(d => { const o = d.data(); o._id = d.id; list.push(o); }); }
+    list.sort((a, b) => (b.placedAt || 0) - (a.placedAt || 0));
+    S.custOrders = list;
+    $('#cust-orders').innerHTML = list.map(o => orderCard(o, { date: true })).join('') || '<p class="empty">No orders found.</p>';
+  } catch (err) { $('#cust-orders').innerHTML = '<p class="empty">Could not load orders (' + esc(err.code || err.message) + ')</p>'; }
+}
+
+/* ───────── view: enquiries ───────── */
+async function renderEnquiries() {
+  const m = $('#main'); m.innerHTML = '<p class="empty">Loading…</p>';
+  try {
+    const snap = await getDocs(query(collection(db, 'enquiries'), limit(300)));
+    S.enquiries = []; snap.forEach(d => S.enquiries.push(Object.assign({ _id: d.id }, d.data())));
+    S.enquiries.sort((a, b) => String(b.createdAt || b.savedAt || '').localeCompare(String(a.createdAt || a.savedAt || '')));
+  } catch (err) { m.innerHTML = '<p class="empty">Could not load (' + esc(err.code || err.message) + ')</p>'; return; }
+  if (S.view !== 'enquiries') return;
+  m.innerHTML = `<div class="list">${S.enquiries.map(e => `<div class="row" style="cursor:default">
+    <h3>${esc((e.firstName || '') + ' ' + (e.lastName || ''))}<small>${e.createdAt ? esc(String(e.createdAt).slice(0, 10)) : ''}</small></h3>
+    <p>${esc(e.service || '')} · <a href="tel:${esc(e.phone || '')}">${esc(e.phone || '')}</a> · <a href="mailto:${esc(e.email || '')}">${esc(e.email || '')}</a></p>
+    <p style="color:var(--brown);margin-top:6px">${esc(e.message || '')}</p>
+    <div class="kv"><span>Status <b>${esc(e.status || 'new')}</b></span><span><button class="more" data-enq="${esc(e._id)}" data-st="${e.status === 'done' ? 'new' : 'done'}">${e.status === 'done' ? 'Mark new' : 'Mark done'}</button></span></div>
+  </div>`).join('') || '<p class="empty">No franchise enquiries yet.</p>'}</div>`;
+  $$('[data-enq]').forEach(b => b.addEventListener('click', async () => { try { await updateDoc(doc(db, 'enquiries', b.dataset.enq), { status: b.dataset.st }); renderEnquiries(); } catch (err) { toast('Failed: ' + err.message); } }));
+}
+
+/* ───────── view: settings ───────── */
+async function renderSettings() {
+  const s = S.settings || {};
+  const m = $('#main');
+  m.innerHTML = `
+    <div class="card"><h2>Online ordering</h2><p>These apply to the website instantly.</p>
+      <div class="grid2">
+        <div class="f"><label>Accepting online orders</label><select id="s-accept"><option value="1"${s.acceptingOrders !== false ? ' selected' : ''}>Yes — open</option><option value="0"${s.acceptingOrders === false ? ' selected' : ''}>No — paused</option></select></div>
+        <div class="f"><label>Message when paused</label><input id="s-closed" value="${esc(s.closedMessage || '')}" placeholder="We open at 6 AM — see you then!"></div>
+        <div class="f"><label>Default ready time (minutes)</label><input id="s-eta" type="number" min="5" max="120" value="${esc(s.eta || 18)}"></div>
+        <div class="f"><label>Delivery fee (₹)</label><input id="s-fee" type="number" min="0" value="${esc(s.deliveryFee == null ? 30 : s.deliveryFee)}"></div>
+        <div class="f"><label>Free delivery above (₹)</label><input id="s-free" type="number" min="0" value="${esc(s.freeDeliveryAbove == null ? 299 : s.freeDeliveryAbove)}"></div>
+      </div>
+    </div>
+    <div class="card"><h2>UPI payments</h2><p>Customers who choose “Pay online” see a QR with the exact order amount, built from this UPI ID. Use the UPI ID from your shop's payment QR (GPay / PhonePe / Paytm business).</p>
+      <div class="grid2">
+        <div class="f"><label>UPI ID (VPA)</label><input id="s-upi" value="${esc(s.upiId || '')}" placeholder="e.g. balajipauva@okaxis" autocapitalize="off" autocomplete="off"></div>
+        <div class="f"><label>Payee name shown in UPI app</label><input id="s-upiname" value="${esc(s.upiName || 'Balaji Pauva House')}"></div>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        <div class="qr-prev" id="qr-prev"></div>
+        <div style="font-size:13.5px;color:var(--muted)">Test QR for <b>₹1</b> — scan it with your own phone: the app must show <b>${esc(s.upiName || 'Balaji Pauva House')}</b> and ₹1 pre-filled. If it does, online payment is live.<br><br><b>Note:</b> payments land in your bank directly; this dashboard cannot see them automatically. Staff verify in the UPI app (note says <i>Balaji order XXXX</i>) and tap <b>Mark paid</b>.</div>
+      </div>
+    </div>
+    <button class="btn p" id="s-save">Save settings</button>
+    <div class="card" style="margin-top:14px"><h2>Staff accounts</h2><p>These emails can log in here. Create the login itself in Firebase console → Authentication → Users → Add user.</p>
+      <ul class="admins" id="admins"><li>Loading…</li></ul>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input id="a-email" placeholder="staff@email.com" style="flex:1;min-width:200px;min-height:40px;border:1.5px solid var(--line);border-radius:12px;padding:7px 12px"><button class="btn" id="a-add">Add admin</button></div>
+    </div>
+    <div class="card"><h2>About</h2><p>Signed in as <b>${esc(S.user.email)}</b>. Website: <a href="/" target="_blank">balajipauvahouse.vercel.app</a> · Shop phone ${SHOP_PHONE}.</p></div>`;
+  const paintQr = () => { const id = $('#s-upi').value.trim(); const box = $('#qr-prev'); if (!/^[a-z0-9._-]{2,}@[a-z][a-z0-9.-]+$/i.test(id)) { box.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 4px">Enter a UPI ID to preview</p>'; return; } const link = 'upi://pay?pa=' + id + '&pn=' + encodeURIComponent($('#s-upiname').value.trim() || 'Balaji Pauva House') + '&am=1.00&cu=INR&tn=Balaji%20test'; try { const q = qrcode(0, 'M'); q.addData(link); q.make(); box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); } catch (_) { box.textContent = ''; } };
+  paintQr(); $('#s-upi').addEventListener('input', paintQr); $('#s-upiname').addEventListener('input', paintQr);
+  $('#s-save').addEventListener('click', async () => {
+    const data = { acceptingOrders: $('#s-accept').value === '1', closedMessage: $('#s-closed').value.trim(), eta: Number($('#s-eta').value) || 18, deliveryFee: Number($('#s-fee').value) || 0, freeDeliveryAbove: Number($('#s-free').value) || 0, upiId: $('#s-upi').value.trim(), upiName: $('#s-upiname').value.trim() || 'Balaji Pauva House', updatedAt: Date.now(), updatedBy: S.user.email };
+    if (data.upiId && !/^[a-z0-9._-]{2,}@[a-z][a-z0-9.-]+$/i.test(data.upiId)) { toast('UPI ID looks wrong (format: name@bank)'); return; }
+    try { await setDoc(doc(db, 'settings', 'store'), data, { merge: true }); toast('Settings saved ✓ — live on the website'); } catch (err) { toast('Failed: ' + (err.code === 'permission-denied' ? 'no permission (publish firestore.rules)' : err.message)); }
+  });
+  const loadAdmins = async () => {
+    try { const snap = await getDocs(collection(db, 'admins')); const ul = $('#admins'); ul.innerHTML = ''; snap.forEach(d => { const li = document.createElement('li'); li.innerHTML = `<b>${esc(d.id)}</b> ${d.data().role ? '<em style="color:var(--muted)">' + esc(d.data().role) + '</em>' : ''}<span>${d.id === S.user.email ? '(you)' : `<button class="btn d sm" data-rm="${esc(d.id)}">Remove</button>`}</span>`; ul.appendChild(li); });
+      $$('[data-rm]').forEach(b => b.addEventListener('click', async () => { if (!confirm('Remove ' + b.dataset.rm + ' from staff?')) return; try { await deleteDoc(doc(db, 'admins', b.dataset.rm)); loadAdmins(); } catch (err) { toast('Failed: ' + err.message); } }));
+    } catch (err) { $('#admins').innerHTML = '<li>Could not list admins (' + esc(err.code || err.message) + ')</li>'; }
+  };
+  loadAdmins();
+  $('#a-add').addEventListener('click', async () => { const em = $('#a-email').value.trim().toLowerCase(); if (!/.+@.+\..+/.test(em)) { toast('Enter a valid email'); return; } try { await setDoc(doc(db, 'admins', em), { role: 'staff', addedBy: S.user.email, addedAt: Date.now() }); $('#a-email').value = ''; toast('Added — now create that login in Firebase Authentication'); loadAdmins(); } catch (err) { toast('Failed: ' + err.message); } });
+}
+
+/* ───────── modal ───────── */
+function openModal(html) { const d = $('#modal'); $('#modal-body').innerHTML = html; if (!d.open) d.showModal(); $('#modal-body [data-close]')?.addEventListener('click', () => d.close()); }
+$('#modal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+/* ───────── print (KOT / bill) ───────── */
+function printOrder(o) {
+  const p = o.payment || {};
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(o.id)}</title><style>
+    body{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;width:72mm;margin:0 auto;padding:6mm 3mm;color:#000}
+    h1{font-size:17px;text-align:center;margin:0}h2{font-size:12px;text-align:center;font-weight:400;margin:2px 0 8px}
+    .big{font-size:22px;font-weight:700;text-align:center;margin:6px 0}
+    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}td:last-child{text-align:right}
+    hr{border:0;border-top:1px dashed #000;margin:6px 0}.tot td{font-weight:700;font-size:15px}.c{text-align:center}.note{border:1px dashed #000;padding:4px;margin:6px 0}
+  </style></head><body>
+    <h1>BALAJI PAUVA HOUSE</h1><h2>${esc(o.outlet || '')} · ${SHOP_PHONE}</h2>
+    <div class="big">#${esc(shortId(o.id))}</div>
+    <div class="c">${esc(o.id)} · ${dateStr(o.placedAt)} ${clock(o.placedAt)}</div>
+    <div class="c"><b>${o.mode === 'pickup' ? 'PICKUP' : 'DELIVERY'}</b> · ${p.method === 'upi' ? (p.status === 'paid' ? 'PAID (UPI)' : 'UPI – NOT PAID') : (p.status === 'paid' ? 'PAID (CASH)' : (o.mode === 'pickup' ? 'PAY AT COUNTER' : 'COD – COLLECT ' + money(o.total)))}</div>
+    <hr><div><b>${esc(o.name || 'Guest')}</b> · ${esc(fmtPhone(o.phone))}</div>${o.mode === 'delivery' && o.address ? '<div>' + esc(o.address) + '</div>' : ''}
+    ${o.note ? '<div class="note">NOTE: ' + esc(o.note) + '</div>' : ''}<hr>
+    <table>${(o.items || []).map(i => `<tr><td>${esc(i.qty)} x ${esc(i.name)}</td><td>${money((i.price || 0) * i.qty)}</td></tr>`).join('')}</table><hr>
+    <table><tr><td>Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td>GST 5%</td><td>${money(o.tax)}</td></tr>${o.delivery ? `<tr><td>Delivery</td><td>${money(o.delivery)}</td></tr>` : ''}${o.roundOff ? `<tr><td>Round off</td><td>${Number(o.roundOff).toFixed(2)}</td></tr>` : ''}<tr class="tot"><td>TOTAL</td><td>${money(o.total)}</td></tr></table>
+    <hr><div class="c">Thank you! Fresh flavours, happy mornings.</div>
+  </body></html>`;
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (_) {} setTimeout(() => f.remove(), 2000); }, 250);
+}
+
+/* keep the screen awake while the board is open (kitchen tablets) */
+try { if ('wakeLock' in navigator) { const req = () => navigator.wakeLock.request('screen').catch(() => {}); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') req(); }); req(); } } catch (_) {}
+window.addEventListener('online', () => setConn(true)); window.addEventListener('offline', () => setConn(false));
+/* local debug hook (only when localStorage bph-debug=1): lets us render the board with sample data */
+try { if (localStorage.getItem('bph-debug') === '1') window.__bph = { S, renderLive, renderHistory, renderCustomers, renderSettings, orderCard, setView }; } catch (_) {}
+</script>
+<script id="qrcode-lib">/* QR Code Generator for JavaScript — Copyright (c) 2009 Kazuhiko Arase — MIT License. "QR Code" is a registered trademark of DENSO WAVE INCORPORATED. */
+var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1})},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}(function(){return qrcode});
+</script>
+</body>
+</html>

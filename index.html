@@ -1851,8 +1851,30 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     freeDeliveryAbove: 299,
     eta: 18,
     acceptingOrders: true,
-    closedMessage: ''
+    closedMessage: '',
+    autoHours: true,          // open/close automatically by shop timings (IST)
+    openTime: '06:00',
+    closeTime: '23:00'
   };
+  /* ---- shop open / closed (manual switch + automatic timings) ---- */
+  const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? Math.min(23, +m[1]) * 60 + Math.min(59, +m[2]) : null; };
+  const fmt12 = t => { const m = toMin(t); if (m == null) return t; const h = Math.floor(m / 60), mm = m % 60; return `${h % 12 || 12}${mm ? ':' + String(mm).padStart(2, '0') : ''} ${h < 12 ? 'AM' : 'PM'}`; };
+  function istMinutes() {
+    try { const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()); const h = +parts.find(x => x.type === 'hour').value, m = +parts.find(x => x.type === 'minute').value; return (h % 24) * 60 + m; }
+    catch (_) { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+  }
+  /* returns { open, reason: 'paused'|'hours', message, opensAt } */
+  function shopState() {
+    if (settings.acceptingOrders === false) return { open: false, reason: 'paused', message: settings.closedMessage || 'We are not taking online orders right now. Please call the outlet or visit us.' };
+    if (settings.autoHours !== false) {
+      const o = toMin(settings.openTime), c = toMin(settings.closeTime), now = istMinutes();
+      if (o != null && c != null && o !== c) {
+        const within = o < c ? (now >= o && now < c) : (now >= o || now < c);
+        if (!within) return { open: false, reason: 'hours', opensAt: fmt12(settings.openTime), message: `We are closed right now — online orders open at ${fmt12(settings.openTime)} (${fmt12(settings.openTime)} to ${fmt12(settings.closeTime)}).` };
+      }
+    }
+    return { open: true, reason: '', message: '' };
+  }
   const upiReady = () => /^[a-z0-9._-]{2,}@[a-z][a-z0-9.-]{1,}$/i.test(String(settings.upiId || ''));
 
   /* ---- icons (lucide-static v0.468.0, ISC) ------------------ */
@@ -2189,13 +2211,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     const btn = $('#confirm-order');
     if (!btn || placing) return;
     t = t || totals();
-    const closed = settings.acceptingOrders === false;
+    const st = shopState(), closed = !st.open;
     btn.disabled = closed || !lines().length;
-    if (closed) { btn.innerHTML = ico.alert + 'Online orders paused'; }
+    if (closed) { btn.innerHTML = ico.alert + (st.reason === 'hours' ? `Closed · opens ${st.opensAt}` : 'Online orders paused'); }
     else if (pay === 'upi' && upiReady()) btn.innerHTML = ico.qr + `Pay ${money(t.total)} &amp; place order`;
     else btn.innerHTML = ico.check + `Place order · ${money(t.total)}`;
     const closedNote = $('#t-closed');
-    if (closedNote) { closedNote.hidden = !closed; closedNote.textContent = closed ? (settings.closedMessage || 'We are not taking online orders right now. Please call the outlet or visit us.') : ''; }
+    if (closedNote) { closedNote.hidden = !closed; closedNote.textContent = closed ? st.message : ''; }
   }
 
   function bindCheckout() {
@@ -2424,7 +2446,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   function showOrderError(reason) {
     const why = reason === 'denied'
       ? 'The order service refused the request (the shop may be updating its settings). Please call the outlet — we will take your order on the phone.'
-      : reason === 'closed' ? (settings.closedMessage || 'We are not taking online orders right now. Please call the outlet or visit us.')
+      : reason === 'closed' ? (shopState().message || settings.closedMessage || 'We are not taking online orders right now. Please call the outlet or visit us.')
       : 'We could not reach the order service. Check your internet connection and try again, or call the outlet.';
     dialogOpen(`
       <div class="order-success order-fail">
@@ -2445,7 +2467,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   /* ---- place the order (real) ------------------------------- */
   async function confirmOrder() {
     if (placing || !lines().length) return;
-    if (settings.acceptingOrders === false) { showOrderError('closed'); return; }
+    if (!shopState().open) { showOrderError('closed'); return; }
     if (!validate()) return;
     const payMethod = pay === 'upi' && upiReady() ? 'upi' : 'cod';
     const id = orderId(), t = totals(), n = count();
@@ -2535,16 +2557,24 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     if (drawer.classList.contains('open')) renderDrawer(); else syncCartUI();
     const closedNote = $('#t-closed');
     if (closedNote) {
-      const closed = settings.acceptingOrders === false;
-      closedNote.hidden = !closed;
-      closedNote.textContent = closed ? (settings.closedMessage || 'We are not taking online orders right now. Please call the outlet or visit us.') : '';
+      const st = shopState();
+      closedNote.hidden = st.open;
+      closedNote.textContent = st.open ? '' : st.message;
     }
   });
+  /* timings flip while the page is open (e.g. 11 PM) → refresh the checkout state every 30 s */
+  let lastOpen = null;
+  setInterval(() => {
+    const open = shopState().open;
+    if (lastOpen !== null && open !== lastOpen) { if (drawer.classList.contains('open')) renderDrawer(); else syncCartUI(); }
+    lastOpen = open;
+  }, 30000);
 
   /* let the My Orders page re-open the payment screen for a pending UPI order */
   window.BalajiPay = {
     show: order => { try { showPayment(order, false); } catch (_) {} },
     upiReady,
+    shopState,
     settings
   };
 

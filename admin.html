@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Balaji Orders">
+<link rel="manifest" href="/admin.webmanifest">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#650e08">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
@@ -151,6 +155,8 @@ main{padding:14px;max-width:1500px;margin:0 auto}
 .chip.live i{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:pulse 1.2s infinite}
 .chip.st{background:var(--maroon);border-color:var(--maroon);color:#ffe9cd}
 .chip.cancel{background:#fdeeee;border-color:#f3bcbc;color:#9c2a1e}
+.chip.new{background:var(--orange);border-color:var(--orange);color:#fff}
+.chip.done{background:#e8f3ea;border-color:#c4dfc9;color:#1f6b31}
 .cust{font-size:14px;margin:4px 0 8px;line-height:1.5}
 .cust b{font-size:15px}
 .cust a{font-weight:700;text-decoration:none}
@@ -222,6 +228,45 @@ dialog::backdrop{background:#2b0f04b0;backdrop-filter:blur(3px)}
 .banner.red{background:#fdecea;border-color:#f2b8b0;color:#8f2214}
 .banner .btn{margin-left:auto}
 @media (max-width:700px){.topbar{padding:8px 10px;gap:6px}.brand{font-size:15px}.brand img{width:28px;height:28px}.tb-btn{padding:5px 9px;font-size:12px;min-height:32px;border-radius:9px}.tb-label{display:none}.tb-mobile{display:inline}.tabs button{padding:8px 11px 10px;font-size:13px}main{padding:10px}.stats{gap:8px}.stat{padding:10px 12px}.stat b{font-size:20px}}
+@media (max-width:640px){
+  main{padding:10px 10px 90px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .stat{padding:10px 12px}.stat b{font-size:22px}.stat span{font-size:11px}
+  .list{grid-template-columns:1fr}
+  .board{gap:10px}
+  .col{padding:10px}
+  .oc{padding:12px}
+  .oc-id{font-size:19px}
+  .oc .acts .btn{min-height:44px;font-size:14px}
+  .toolbar input,.toolbar select{min-height:44px;font-size:16px}
+  .f input,.f select{min-height:44px;font-size:16px}
+  .grid2{grid-template-columns:1fr}
+  .card{padding:14px;border-radius:14px}
+  .tabs{padding:6px 8px 0}.tabs button{padding:9px 12px 11px;font-size:13.5px}
+  dialog{max-width:100vw;width:100vw;margin:auto 0 0;max-height:94vh}
+  dialog .modal{border-radius:20px 20px 0 0;max-height:94vh}
+  .banner{font-size:13.5px}
+  .enq-acts .btn{flex:1 1 auto;min-height:42px}
+}
+/* page opened in "Desktop site" mode on a phone → everything looks tiny; show how to fix */
+.desktop-note{background:#ff9f1c;color:#3a1200;font-size:15px;font-weight:600;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.desktop-note b{font-weight:900}
+.desktop-note button{margin-left:auto;background:#3a1200;color:#ffe9cd;border-radius:10px;padding:8px 14px;font-weight:700}
+/* enquiries */
+.enq{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);border-left:5px solid var(--orange)}
+.enq.done{border-left-color:#c7b9a6;opacity:.85}
+.enq-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.enq-head h3{font-size:17px;color:var(--maroon)}
+.enq-head time{margin-left:auto;color:var(--muted);font-size:12.5px;font-weight:600}
+.enq-meta{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:6px;font-size:13.5px;color:var(--brown)}
+.enq-meta a{color:var(--maroon);font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.enq-meta a svg{width:14px;height:14px}
+.enq-msg{margin-top:10px;background:#fff8dc;border:1px dashed #e7cf9a;border-radius:10px;padding:9px 11px;font-size:14px;color:#4a3414;white-space:pre-wrap;word-break:break-word}
+.enq-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.enq-acts .chip{margin-right:auto}
+.chips-filter{display:flex;gap:6px;flex-wrap:wrap}
+.chips-filter button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;color:var(--brown)}
+.chips-filter button.on{background:var(--maroon);color:#ffe9cd;border-color:var(--maroon)}
 @media print{body>*{display:none!important}}
 </style>
 </head>
@@ -427,6 +472,7 @@ $('#logout-btn').addEventListener('click', () => signOut(auth));
 /* ───────── live listeners ───────── */
 function stopListeners() { S.unsubs.forEach(u => { try { u(); } catch (_) {} }); S.unsubs = []; S.orders.clear(); S.seen.clear(); S.booted = false; }
 function startListeners() {
+  updateEnqBadge(true);
   stopListeners();
   const since = Date.now() - 36 * 3600e3;
   const q1 = query(collection(db, 'orders'), where('placedAt', '>=', since));
@@ -820,21 +866,88 @@ async function openCustomer(phone) {
 }
 
 /* ───────── view: enquiries ───────── */
-async function renderEnquiries() {
-  const m = $('#main'); m.innerHTML = '<p class="empty">Loading…</p>';
-  try {
-    const snap = await getDocs(query(collection(db, 'enquiries'), limit(300)));
-    S.enquiries = []; snap.forEach(d => S.enquiries.push(Object.assign({ _id: d.id }, d.data())));
-    S.enquiries.sort((a, b) => String(b.createdAt || b.savedAt || '').localeCompare(String(a.createdAt || a.savedAt || '')));
-  } catch (err) { m.innerHTML = '<p class="empty">Could not load (' + esc(err.code || err.message) + ')</p>'; return; }
+async function renderEnquiries(reload = true) {
+  const m = $('#main');
+  if (reload && S.enquiries) {            // show the cached list at once, refresh quietly behind it
+    renderEnquiries(false);
+    try { const snap = await getDocs(query(collection(db, 'enquiries'), limit(300))); const fresh = []; snap.forEach(d => fresh.push(Object.assign({ _id: d.id }, d.data()))); S.enquiries = fresh; }
+    catch (_) { return; }
+    if (S.view === 'enquiries') renderEnquiries(false);
+    updateEnqBadge(); return;
+  }
+  if (!S.enquiries) {
+    m.innerHTML = '<p class="empty">Loading…</p>';
+    try {
+      const snap = await getDocs(query(collection(db, 'enquiries'), limit(300)));
+      S.enquiries = []; snap.forEach(d => S.enquiries.push(Object.assign({ _id: d.id }, d.data())));
+    } catch (err) { m.innerHTML = '<p class="empty">Could not load (' + esc(err.code || err.message) + ')</p>'; return; }
+  }
   if (S.view !== 'enquiries') return;
-  m.innerHTML = `<div class="list">${S.enquiries.map(e => `<div class="row" style="cursor:default">
-    <h3>${esc((e.firstName || '') + ' ' + (e.lastName || ''))}<small>${e.createdAt ? esc(String(e.createdAt).slice(0, 10)) : ''}</small></h3>
-    <p>${esc(e.service || '')} · <a href="tel:${esc(e.phone || '')}">${esc(e.phone || '')}</a> · <a href="mailto:${esc(e.email || '')}">${esc(e.email || '')}</a></p>
-    <p style="color:var(--brown);margin-top:6px">${esc(e.message || '')}</p>
-    <div class="kv"><span>Status <b>${esc(e.status || 'new')}</b></span><span><button class="more" data-enq="${esc(e._id)}" data-st="${e.status === 'done' ? 'new' : 'done'}">${e.status === 'done' ? 'Mark new' : 'Mark done'}</button></span></div>
-  </div>`).join('') || '<p class="empty">No franchise enquiries yet.</p>'}</div>`;
-  $$('[data-enq]').forEach(b => b.addEventListener('click', async () => { try { await updateDoc(doc(db, 'enquiries', b.dataset.enq), { status: b.dataset.st }); renderEnquiries(); } catch (err) { toast('Failed: ' + err.message); } }));
+  const when = e => { const t = Date.parse(e.createdAt || '') || Number(e.savedAt) || 0; return t; };
+  S.enquiries.sort((a, b) => when(b) - when(a));
+  S.enqFilter = S.enqFilter || 'new';
+  const isDone = e => e.status === 'done';
+  const neu = S.enquiries.filter(e => !isDone(e)), done = S.enquiries.filter(isDone);
+  const list = S.enqFilter === 'new' ? neu : S.enqFilter === 'done' ? done : S.enquiries;
+  const wa = ph => { const d = String(ph || '').replace(/\D/g, ''); return d ? 'https://wa.me/' + (d.length === 10 ? '91' + d : d) : ''; };
+  const dateStrE = e => { const t = when(e); return t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+  m.innerHTML = `
+    <div class="stats">
+      <div class="stat ${neu.length ? 'warn' : ''}"><b>${neu.length}</b><span>New enquiries</span></div>
+      <div class="stat"><b>${done.length}</b><span>Done</span></div>
+    </div>
+    <div class="toolbar">
+      <div class="chips-filter">
+        <button data-ef="new" class="${S.enqFilter === 'new' ? 'on' : ''}">New (${neu.length})</button>
+        <button data-ef="done" class="${S.enqFilter === 'done' ? 'on' : ''}">Done (${done.length})</button>
+        <button data-ef="all" class="${S.enqFilter === 'all' ? 'on' : ''}">All (${S.enquiries.length})</button>
+      </div>
+      <span style="flex:1"></span>
+      ${done.length ? `<button class="btn d sm" id="enq-clear-done">${I.trash} Delete all done (${done.length})</button>` : ''}
+      <button class="btn sm" id="enq-reload">Refresh</button>
+    </div>
+    <div class="list">${list.map(e => `<article class="enq ${isDone(e) ? 'done' : ''}" data-eid="${esc(e._id)}">
+      <div class="enq-head"><h3>${esc(((e.firstName || '') + ' ' + (e.lastName || '')).trim() || 'No name')}</h3>${e.service ? `<span class="chip cod">${esc(e.service)}</span>` : ''}<time>${esc(dateStrE(e))}</time></div>
+      <div class="enq-meta">
+        ${e.phone ? `<a href="tel:${esc(e.phone)}">${I.phone} ${esc(e.phone)}</a><a href="${esc(wa(e.phone))}" target="_blank" rel="noopener">WhatsApp ↗</a>` : ''}
+        ${e.email ? `<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>` : ''}
+      </div>
+      ${e.message ? `<div class="enq-msg">${esc(e.message)}</div>` : ''}
+      <div class="enq-acts">
+        <span class="chip ${isDone(e) ? 'done' : 'new'}">${isDone(e) ? 'Done' : 'New'}</span>
+        <button class="btn sm ${isDone(e) ? '' : 'g'}" data-enq="${esc(e._id)}" data-st="${isDone(e) ? 'new' : 'done'}">${isDone(e) ? 'Mark as new' : I.check + ' Mark done'}</button>
+        <button class="btn sm d" data-enq-del="${esc(e._id)}">${I.trash} Delete</button>
+      </div>
+    </article>`).join('') || `<p class="empty">${S.enqFilter === 'new' ? 'No new enquiries — all clear ✓' : 'Nothing here.'}</p>`}</div>`;
+  $$('[data-ef]').forEach(b => b.addEventListener('click', () => { S.enqFilter = b.dataset.ef; renderEnquiries(false); }));
+  $('#enq-reload').addEventListener('click', () => renderEnquiries(true));
+  $$('[data-enq]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await updateDoc(doc(db, 'enquiries', b.dataset.enq), { status: b.dataset.st, updatedAt: Date.now(), updatedBy: S.user.email }); const e = S.enquiries.find(x => x._id === b.dataset.enq); if (e) e.status = b.dataset.st; toast(b.dataset.st === 'done' ? 'Marked done' : 'Marked new'); renderEnquiries(false); updateEnqBadge(); }
+    catch (err) { toast('Failed: ' + (err.code || err.message)); b.disabled = false; }
+  }));
+  $$('[data-enq-del]').forEach(b => b.addEventListener('click', async () => {
+    const e = S.enquiries.find(x => x._id === b.dataset.enqDel) || {};
+    if (!confirm(`Delete the enquiry from ${((e.firstName || '') + ' ' + (e.lastName || '')).trim() || 'this person'}?\n\nThis cannot be undone.`)) return;
+    b.disabled = true;
+    try { await deleteDoc(doc(db, 'enquiries', b.dataset.enqDel)); S.enquiries = S.enquiries.filter(x => x._id !== b.dataset.enqDel); toast('Deleted'); renderEnquiries(false); updateEnqBadge(); }
+    catch (err) { toast('Failed: ' + (err.code || err.message)); b.disabled = false; }
+  }));
+  $('#enq-clear-done')?.addEventListener('click', async () => {
+    if (!confirm(`Delete all ${done.length} enquiries marked done?\n\nThis cannot be undone.`)) return;
+    let failed = 0;
+    for (const e of done) { try { await deleteDoc(doc(db, 'enquiries', e._id)); S.enquiries = S.enquiries.filter(x => x._id !== e._id); } catch (_) { failed++; } }
+    toast(failed ? `Done, ${failed} failed` : 'All done enquiries deleted'); renderEnquiries(false); updateEnqBadge();
+  });
+}
+/* small "new enquiries" badge on the tab, loaded quietly after login */
+async function updateEnqBadge(fetch = false) {
+  try {
+    if (fetch) { const snap = await getDocs(query(collection(db, 'enquiries'), limit(300))); S.enquiries = []; snap.forEach(d => S.enquiries.push(Object.assign({ _id: d.id }, d.data()))); }
+    const n = (S.enquiries || []).filter(e => e.status !== 'done').length;
+    let c = $('#cnt-enq'); if (!c) { c = document.createElement('span'); c.className = 'cnt'; c.id = 'cnt-enq'; $('#tabs button[data-view="enquiries"]').appendChild(c); }
+    c.textContent = n; c.hidden = !n;
+  } catch (_) {}
 }
 
 /* ───────── view: settings ───────── */
@@ -919,6 +1032,18 @@ function printOrder(o) {
 /* keep the screen awake while the board is open (kitchen tablets) */
 try { if ('wakeLock' in navigator) { const req = () => navigator.wakeLock.request('screen').catch(() => {}); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') req(); }); req(); } } catch (_) {}
 window.addEventListener('online', () => setConn(true)); window.addEventListener('offline', () => setConn(false));
+/* "Desktop site" mode on a phone makes the layout ~980px wide and tiny. Detect it and explain the fix. */
+try {
+  const phoneScreen = Math.min(screen.width, screen.height) <= 600;
+  const wideLayout = window.innerWidth >= 900;
+  const touch = navigator.maxTouchPoints > 0;
+  if (phoneScreen && wideLayout && touch && sessionStorage.getItem('bph-desktop-note') !== 'x') {
+    const n = document.createElement('div'); n.className = 'desktop-note';
+    n.innerHTML = '<span>Everything looks tiny? Your browser is in <b>“Desktop site”</b> mode. Open the browser menu (⋮) and untick <b>Desktop site</b> — or use <b>Add to Home screen</b> and open Balaji Orders as an app.</span><button type="button">OK</button>';
+    n.querySelector('button').addEventListener('click', () => { sessionStorage.setItem('bph-desktop-note', 'x'); n.remove(); });
+    document.body.prepend(n);
+  }
+} catch (_) {}
 /* local debug hook (only when localStorage bph-debug=1): lets us render the board with sample data */
 try { if (localStorage.getItem('bph-debug') === '1') window.__bph = { S, renderLive, renderHistory, renderCustomers, renderSettings, orderCard, setView, paintStatus, shopState, setConn }; } catch (_) {}
 </script>
